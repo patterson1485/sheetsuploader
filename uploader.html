@@ -1,251 +1,250 @@
+ from pathlib import Path
+
+# Generate a secure PHP version of the uploader with secrets injected via PHP variables
+php_code = '''<?php
+  $google_api_key = 'YOUR_REAL_API_KEY';
+  $google_client_id = 'YOUR_REAL_CLIENT_ID';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>File Uploader for Google Sheets</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    body {
-      font-family: 'Inter', sans-serif;
-    }
-    .form-input {
-      @apply w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500;
-    }
-    .btn {
-      @apply px-4 py-2 font-semibold rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800;
-    }
-    .btn-primary {
-      @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
-    }
-    .btn-secondary {
-      @apply bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500;
-    }
-    .btn-google {
-      @apply bg-white text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-3;
-    }
-    #log-area {
-      height: 150px;
-      font-family: 'Courier New', Courier, monospace;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Uploader for Google Sheets</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .form-input {
+            @apply w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500;
+        }
+        .btn {
+            @apply px-4 py-2 font-semibold rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800;
+        }
+        .btn-primary {
+            @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+        }
+        .btn-secondary {
+            @apply bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500;
+        }
+        .btn-google {
+            @apply bg-white text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-3;
+        }
+        #log-area {
+            height: 150px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+    </style>
 </head>
 <body class="bg-gray-800 text-gray-200 flex items-center justify-center min-h-screen p-4"
-      data-api-key="REPLACE_WITH_API_KEY"
-      data-client-id="REPLACE_WITH_CLIENT_ID">
+      data-api-key="<?= htmlspecialchars($google_api_key, ENT_QUOTES) ?>"
+      data-client-id="<?= htmlspecialchars($google_client_id, ENT_QUOTES) ?>">
 
-<!-- (The rest of your HTML layout remains exactly the same) -->
+<div class="w-full max-w-2xl bg-gray-900 p-8 rounded-xl shadow-2xl">
+    <header class="text-center mb-6">
+        <h1 class="text-3xl font-bold text-white">Upload File to Google Sheet</h1>
+        <p class="text-gray-400 mt-1">Uploads a file to Drive & adds a link to Sheets.</p>
+    </header>
 
-<!-- ...content omitted for brevity... -->
+    <div id="auth-section" class="text-center">
+        <p class="mb-4 text-gray-300">Please sign in with your Google Account to continue.</p>
+        <button id="authorize_button" class="btn btn-google w-full md:w-auto">Sign In with Google</button>
+        <button id="signout_button" class="hidden btn btn-secondary mt-4">Sign Out</button>
+    </div>
+
+    <div id="uploader-section" class="hidden space-y-4">
+        <div>
+            <label for="spreadsheet-id" class="block text-sm font-medium text-gray-300 mb-1">Google Spreadsheet ID</label>
+            <input type="text" id="spreadsheet-id" class="form-input" placeholder="e.g., 1Bxi...">
+        </div>
+        <div>
+            <label for="sheet-range" class="block text-sm font-medium text-gray-300 mb-1">Sheet Name & Range</label>
+            <input type="text" id="sheet-range" class="form-input" value="Sheet1!A1">
+        </div>
+        <div>
+            <label for="file-input" class="block text-sm font-medium text-gray-300 mb-1">File to Upload</label>
+            <input type="file" id="file-input" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+        </div>
+        <button id="upload-button" class="btn btn-primary w-full">Upload File</button>
+    </div>
+
+    <div class="mt-6">
+         <label class="block text-sm font-medium text-gray-400 mb-1">Status Log</label>
+         <div id="log-area" class="w-full bg-gray-950 rounded-md p-3 text-sm text-gray-300 overflow-y-auto border border-gray-700">Waiting for user action...</div>
+    </div>
+</div>
 
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script type="text/javascript">
-  const API_KEY = document.body.dataset.apiKey;
-  const CLIENT_ID = document.body.dataset.clientId;
-  const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
+    const API_KEY = document.body.dataset.apiKey;
+    const CLIENT_ID = document.body.dataset.clientId;
+    const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
+    let tokenClient, gapiInited = false, gisInited = false;
 
-  let tokenClient;
-  let gapiInited = false;
-  let gisInited = false;
+    const authSection = document.getElementById('auth-section');
+    const uploaderSection = document.getElementById('uploader-section');
+    const authorizeButton = document.getElementById('authorize_button');
+    const signoutButton = document.getElementById('signout_button');
+    const uploadButton = document.getElementById('upload-button');
+    const logArea = document.getElementById('log-area');
 
-  const authSection = document.getElementById('auth-section');
-  const uploaderSection = document.getElementById('uploader-section');
-  const authorizeButton = document.getElementById('authorize_button');
-  const signoutButton = document.getElementById('signout_button');
-  const uploadButton = document.getElementById('upload-button');
-  const logArea = document.getElementById('log-area');
-
-  window.onload = () => {
-    log('Current Origin: ' + window.location.origin);
-    const gapiScript = document.createElement('script');
-    gapiScript.src = 'https://apis.google.com/js/api.js';
-    gapiScript.onload = gapiLoaded;
-    document.body.appendChild(gapiScript);
-
-    const gisScript = document.createElement('script');
-    gisScript.src = 'https://accounts.google.com/gsi/client';
-    gisScript.onload = gisLoaded;
-    document.body.appendChild(gisScript);
-
-    authorizeButton.onclick = handleAuthClick;
-    signoutButton.onclick = handleSignoutClick;
-    uploadButton.onclick = handleUploadClick;
-  };
-
-  function gapiLoaded() {
-    gapi.load('client', initializeGapiClient);
-  }
-
-  async function initializeGapiClient() {
-    if (!API_KEY) {
-      log('ERROR: API_KEY is not set. Please update the dataset attribute.');
-      return;
-    }
-    await gapi.client.init({
-      apiKey: API_KEY,
-      discoveryDocs: [
-        'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
-        'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest'
-      ],
-    });
-    gapiInited = true;
-    maybeEnableButtons();
-  }
-
-  function gisLoaded() {
-    if (!CLIENT_ID) {
-      log('ERROR: CLIENT_ID is not set. Please update the dataset attribute.');
-      return;
-    }
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: tokenCallback,
-    });
-    gisInited = true;
-    maybeEnableButtons();
-  }
-
-  function maybeEnableButtons() {
-    authorizeButton.disabled = !(gapiInited && gisInited);
-    if (gapiInited && gisInited) {
-      log('Ready to sign in.');
-    }
-  }
-
-  function handleAuthClick() {
-    const token = gapi.client.getToken();
-    tokenClient.requestAccessToken({ prompt: token ? '' : 'consent' });
-  }
-
-  function handleSignoutClick() {
-    const token = gapi.client.getToken();
-    if (token !== null) {
-      google.accounts.oauth2.revoke(token.access_token);
-      gapi.client.setToken('');
-      updateUiForAuthState(false);
-      log('User signed out.');
-    }
-  }
-
-  function tokenCallback(resp) {
-    if (resp.error !== undefined) {
-      log('ERROR: ' + JSON.stringify(resp, null, 2));
-      throw resp;
-    }
-    updateUiForAuthState(true);
-    log('Authentication successful.');
-  }
-
-  function updateUiForAuthState(isSignedIn) {
-    authSection.classList.toggle('hidden', isSignedIn);
-    uploaderSection.classList.toggle('hidden', !isSignedIn);
-    signoutButton.classList.toggle('hidden', !isSignedIn);
-  }
-
-  async function handleUploadClick() {
-    const spreadsheetId = document.getElementById('spreadsheet-id').value;
-    const range = document.getElementById('sheet-range').value;
-    const fileInput = document.getElementById('file-input');
-
-    if (!spreadsheetId || !range) {
-      log('ERROR: Spreadsheet ID and Range are required.');
-      return;
-    }
-    if (fileInput.files.length === 0) {
-      log('ERROR: Please select a file to upload.');
-      return;
-    }
-
-    const file = fileInput.files[0];
-    log(`Starting upload for: ${file.name}`);
-    uploadButton.disabled = true;
-    uploadButton.textContent = 'Uploading...';
-
-    try {
-      const driveResponse = await uploadFileToDrive(file);
-      log(`File uploaded to Drive. File ID: ${driveResponse.id}`);
-
-      await makeFilePublic(driveResponse.id);
-      log('File permissions updated to public.');
-
-      const fileLink = await getDriveFileLink(driveResponse.id);
-      log(`File link: ${fileLink}`);
-
-      await appendDataToSheet(spreadsheetId, range, file.name, fileLink);
-      log('Successfully updated Google Sheet!');
-    } catch (error) {
-      const errorMessage = error.result ? error.result.error.message : error.message;
-      log(`ERROR: ${errorMessage}`);
-      console.error(error);
-    } finally {
-      uploadButton.disabled = false;
-      uploadButton.textContent = 'Upload File';
-    }
-  }
-
-  function uploadFileToDrive(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      reader.onload = async (e) => {
-        const fileContent = e.target.result;
-        try {
-          const response = await gapi.client.drive.files.create({
-            resource: {
-              name: file.name,
-              mimeType: file.type,
-            },
-            media: {
-              mimeType: file.type,
-              body: fileContent,
-            },
-            fields: 'id',
-          });
-          resolve(response.result);
-        } catch (error) {
-          reject(error);
-        }
-      };
-    });
-  }
-
-  async function makeFilePublic(fileId) {
-    await gapi.client.drive.permissions.create({
-      fileId: fileId,
-      resource: {
-        role: 'reader',
-        type: 'anyone',
-      },
-    });
-  }
-
-  async function getDriveFileLink(fileId) {
-    const response = await gapi.client.drive.files.get({
-      fileId: fileId,
-      fields: 'webViewLink',
-    });
-    return response.result.webViewLink;
-  }
-
-  async function appendDataToSheet(spreadsheetId, range, fileName, fileLink) {
-    const body = {
-      values: [[fileName, fileLink, new Date().toLocaleString()]],
+    window.onload = () => {
+        log('Current Origin: ' + window.location.origin);
+        authorizeButton.onclick = handleAuthClick;
+        signoutButton.onclick = handleSignoutClick;
+        uploadButton.onclick = handleUploadClick;
+        gapi.load('client', initializeGapiClient);
+        gisLoaded();
     };
-    await gapi.client.sheets.spreadsheets.values.append({
-      spreadsheetId: spreadsheetId,
-      range: range,
-      valueInputOption: 'USER_ENTERED',
-      resource: body,
-    });
-  }
 
-  function log(message) {
-    const timestamp = new Date().toLocaleTimeString();
-    logArea.innerHTML = `[${timestamp}] ${message}\n` + logArea.innerHTML;
-  }
+    async function initializeGapiClient() {
+        await gapi.client.init({
+            apiKey: API_KEY,
+            discoveryDocs: [
+                'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+                'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest'
+            ],
+        });
+        gapiInited = true;
+        maybeEnableButtons();
+    }
+
+    function gisLoaded() {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: tokenCallback,
+        });
+        gisInited = true;
+        maybeEnableButtons();
+    }
+
+    function maybeEnableButtons() {
+        if (gapiInited && gisInited) {
+            authorizeButton.disabled = false;
+            log('Ready to sign in.');
+        } else {
+            authorizeButton.disabled = true;
+        }
+    }
+
+    function handleAuthClick() {
+        const token = gapi.client.getToken();
+        tokenClient.requestAccessToken({ prompt: token ? '' : 'consent' });
+    }
+
+    function handleSignoutClick() {
+        const token = gapi.client.getToken();
+        if (token) {
+            google.accounts.oauth2.revoke(token.access_token);
+            gapi.client.setToken('');
+            updateUiForAuthState(false);
+            log('User signed out.');
+        }
+    }
+
+    function tokenCallback(resp) {
+        if (resp.error !== undefined) {
+            log('ERROR: ' + JSON.stringify(resp, null, 2));
+            return;
+        }
+        updateUiForAuthState(true);
+        log('Authentication successful.');
+    }
+
+    function updateUiForAuthState(isSignedIn) {
+        authSection.classList.toggle('hidden', isSignedIn);
+        uploaderSection.classList.toggle('hidden', !isSignedIn);
+        signoutButton.classList.toggle('hidden', !isSignedIn);
+    }
+
+    async function handleUploadClick() {
+        const spreadsheetId = document.getElementById('spreadsheet-id').value;
+        const range = document.getElementById('sheet-range').value;
+        const fileInput = document.getElementById('file-input');
+        if (!spreadsheetId || !range || fileInput.files.length === 0) {
+            log('Missing required info.');
+            return;
+        }
+
+        const file = fileInput.files[0];
+        uploadButton.disabled = true;
+        uploadButton.textContent = 'Uploading...';
+
+        try {
+            const driveResponse = await uploadFileToDrive(file);
+            await makeFilePublic(driveResponse.id);
+            const fileLink = await getDriveFileLink(driveResponse.id);
+            await appendDataToSheet(spreadsheetId, range, file.name, fileLink);
+            log('Successfully uploaded and linked!');
+        } catch (error) {
+            const errorMessage = error.result ? error.result.error.message : error.message;
+            log(`ERROR: ${errorMessage}`);
+            console.error(error);
+        } finally {
+            uploadButton.disabled = false;
+            uploadButton.textContent = 'Upload File';
+        }
+    }
+
+    function uploadFileToDrive(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            reader.onload = async (e) => {
+                try {
+                    const response = await gapi.client.drive.files.create({
+                        resource: { name: file.name, mimeType: file.type },
+                        media: { mimeType: file.type, body: e.target.result },
+                        fields: 'id',
+                    });
+                    resolve(response.result);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+        });
+    }
+
+    async function makeFilePublic(fileId) {
+        await gapi.client.drive.permissions.create({
+            fileId: fileId,
+            resource: { role: 'reader', type: 'anyone' },
+        });
+    }
+
+    async function getDriveFileLink(fileId) {
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            fields: 'webViewLink'
+        });
+        return response.result.webViewLink;
+    }
+
+    async function appendDataToSheet(spreadsheetId, range, fileName, fileLink) {
+        const values = [[fileName, fileLink, new Date().toLocaleString()]];
+        const body = { values };
+        await gapi.client.sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range,
+            valueInputOption: 'USER_ENTERED',
+            resource: body,
+        });
+    }
+
+    function log(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        logArea.innerHTML = `[${timestamp}] ${message}\n` + logArea.innerHTML;
+    }
 </script>
 </body>
-</html>
+</html>'''
+
+# Save to a file
+file_path = Path("/mnt/data/uploader.php")
+file_path.write_text(php_code)
+
+file_path.name
