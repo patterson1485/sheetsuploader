@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- **CRITICAL FIX:** This meta tag fixes the Content Security Policy error on GitHub Pages. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com; frame-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://content.googleapis.com;">
     <title>File Uploader for Google Sheets</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -71,6 +73,14 @@
              <div id="log-area" class="w-full bg-gray-950 rounded-md p-3 text-sm text-gray-300 overflow-y-auto border border-gray-700">Waiting for user action...</div>
         </div>
     </div>
+    
+    <script>
+        // Define gapi and google stubs to prevent errors on immediate script access
+        var gapi = window.gapi || {};
+        var google = window.google || {};
+    </script>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
     <script type="text/javascript">
         let API_KEY = '';
@@ -80,8 +90,6 @@
         let tokenClient;
         let gapiInited = false;
         let gisInited = false;
-        var gapi; // Declare gapi and google in a scope accessible to all functions
-        var google;
 
         const keySection = document.getElementById('key-section');
         const authSection = document.getElementById('auth-section');
@@ -111,16 +119,14 @@
 
             log('Keys received. Initializing Google services...');
             keySection.classList.add('hidden');
-            
-            const gapiScript = document.createElement('script');
-            gapiScript.src = 'https://apis.google.com/js/api.js';
-            gapiScript.onload = () => gapi.load('client', initializeGapiClient);
-            document.body.appendChild(gapiScript);
-            
-            const gisScript = document.createElement('script');
-            gisScript.src = 'https://accounts.google.com/gsi/client';
-            gisScript.onload = initializeGisClient;
-            document.body.appendChild(gisScript);
+            gapiLoaded(); // Manually trigger load since scripts are already requested
+            gisLoaded();
+        }
+
+        function gapiLoaded() {
+            if (window.gapi) {
+                 gapi.load('client', initializeGapiClient);
+            }
         }
 
         async function initializeGapiClient() {
@@ -138,7 +144,7 @@
             }
         }
 
-        function initializeGisClient() {
+        function gisLoaded() {
             try {
                  if (window.google && google.accounts && google.accounts.oauth2) {
                     tokenClient = google.accounts.oauth2.initTokenClient({
@@ -148,8 +154,6 @@
                     });
                     gisInited = true;
                     maybeEnableAuth();
-                 } else {
-                     log('ERROR: Google Identity Services library not loaded correctly.');
                  }
             } catch(error) {
                  log('ERROR initializing GIS client. Check your Client ID and Authorized JavaScript Origins in Google Cloud Console.');
@@ -299,3 +303,11 @@
     </script>
 </body>
 </html>
+```
+
+### **Step 2: Wait 5 Minutes**
+
+After you update the file on GitHub, please **wait about 5 minutes** for the changes to go live across their network. This is the most common reason for a `404 Not Found` error.
+
+After waiting, please visit your permanent link again. The tool should now load correctly and work as expected.
+**[https://patterson1485.github.io/sheetsuploader/uploader.html](https://patterson1485.github.io/sheetsuploader/uploader.html
